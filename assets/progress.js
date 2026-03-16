@@ -158,21 +158,40 @@ class ProgressIndicator {
                 justify-content: flex-end;
             }
 
+            .progress-pause-btn,
             .progress-cancel-btn {
                 padding: 10px 20px;
-                background: rgba(255, 69, 96, 0.1);
-                border: 1px solid rgba(255, 69, 96, 0.3);
-                color: var(--err);
                 border-radius: 10px;
                 font-family: 'Syne', sans-serif;
                 font-size: 13px;
                 font-weight: 700;
                 cursor: pointer;
                 transition: all 0.2s;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .progress-pause-btn {
+                background: rgba(240, 165, 0, 0.1);
+                border: 1px solid rgba(240, 165, 0, 0.3);
+                color: var(--a1);
+            }
+
+            .progress-pause-btn:hover {
+                background: rgba(240, 165, 0, 0.2);
+                transform: translateY(-1px);
+            }
+
+            .progress-cancel-btn {
+                background: rgba(255, 69, 96, 0.1);
+                border: 1px solid rgba(255, 69, 96, 0.3);
+                color: var(--err);
             }
 
             .progress-cancel-btn:hover {
                 background: rgba(255, 69, 96, 0.2);
+                transform: translateY(-1px);
             }
 
             @keyframes fadeIn {
@@ -221,7 +240,10 @@ class ProgressIndicator {
             id = 'default',
             title = 'Processing...',
             cancellable = false,
-            onCancel = null
+            pauseable = false,
+            onCancel = null,
+            onPause = null,
+            onResume = null
         } = options;
 
         if (this.activeIndicators.has(id)) {
@@ -243,12 +265,24 @@ class ProgressIndicator {
                     <div class="progress-percentage">0%</div>
                     <div class="progress-meta">
                         <span class="progress-current">0</span> / <span class="progress-total">0</span>
+                        <span class="progress-speed" style="margin-left: 12px; opacity: 0.6;"></span>
                     </div>
                 </div>
                 <div class="progress-logs"></div>
-                ${cancellable ? `
+                ${cancellable || pauseable ? `
                     <div class="progress-actions">
-                        <button class="progress-cancel-btn">Cancel</button>
+                        ${pauseable ? `
+                            <button class="progress-pause-btn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="6" y="4" width="4" height="16"></rect>
+                                    <rect x="14" y="4" width="4" height="16"></rect>
+                                </svg>
+                                Pause
+                            </button>
+                        ` : ''}
+                        ${cancellable ? `
+                            <button class="progress-cancel-btn">Cancel</button>
+                        ` : ''}
                     </div>
                 ` : ''}
             </div>
@@ -256,16 +290,38 @@ class ProgressIndicator {
 
         document.body.appendChild(modal);
 
+        let isPaused = false;
+        let startTime = Date.now();
+        let lastUpdate = Date.now();
+        let lastCurrent = 0;
+
         const indicator = {
             modal,
             id,
             logs: [],
+            isPaused: false,
             update: (current, total) => {
                 const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
                 modal.querySelector('.progress-bar').style.width = `${percentage}%`;
                 modal.querySelector('.progress-percentage').textContent = `${percentage}%`;
                 modal.querySelector('.progress-current').textContent = current;
                 modal.querySelector('.progress-total').textContent = total;
+
+                const now = Date.now();
+                const timeDiff = (now - lastUpdate) / 1000;
+                const itemsDiff = current - lastCurrent;
+
+                if (timeDiff > 0 && itemsDiff > 0) {
+                    const speed = itemsDiff / timeDiff;
+                    const speedText = speed.toFixed(1) + ' items/s';
+                    const remaining = total - current;
+                    const eta = remaining / speed;
+                    const etaText = eta > 60 ? `${Math.floor(eta / 60)}m ${Math.floor(eta % 60)}s` : `${Math.floor(eta)}s`;
+
+                    modal.querySelector('.progress-speed').textContent = `${speedText} • ETA: ${etaText}`;
+                    lastUpdate = now;
+                    lastCurrent = current;
+                }
             },
             log: (message, type = 'info') => {
                 const logsContainer = modal.querySelector('.progress-logs');
@@ -280,6 +336,43 @@ class ProgressIndicator {
                 logsContainer.scrollTop = logsContainer.scrollHeight;
                 indicator.logs.push({ time, message, type });
             },
+            pause: () => {
+                if (isPaused) return;
+                isPaused = true;
+                indicator.isPaused = true;
+                modal.querySelector('.progress-spinner').style.animationPlayState = 'paused';
+                modal.querySelector('.progress-bar').style.animationPlayState = 'paused';
+                const pauseBtn = modal.querySelector('.progress-pause-btn');
+                if (pauseBtn) {
+                    pauseBtn.innerHTML = `
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        Resume
+                    `;
+                }
+                indicator.log('Operation paused', 'warning');
+                if (onPause) onPause();
+            },
+            resume: () => {
+                if (!isPaused) return;
+                isPaused = false;
+                indicator.isPaused = false;
+                modal.querySelector('.progress-spinner').style.animationPlayState = 'running';
+                modal.querySelector('.progress-bar').style.animationPlayState = 'running';
+                const pauseBtn = modal.querySelector('.progress-pause-btn');
+                if (pauseBtn) {
+                    pauseBtn.innerHTML = `
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="6" y="4" width="4" height="16"></rect>
+                            <rect x="14" y="4" width="4" height="16"></rect>
+                        </svg>
+                        Pause
+                    `;
+                }
+                indicator.log('Operation resumed', 'success');
+                if (onResume) onResume();
+            },
             close: () => {
                 modal.style.animation = 'fadeOut 0.3s ease';
                 setTimeout(() => {
@@ -288,6 +381,17 @@ class ProgressIndicator {
                 }, 300);
             }
         };
+
+        if (pauseable) {
+            const pauseBtn = modal.querySelector('.progress-pause-btn');
+            pauseBtn.addEventListener('click', () => {
+                if (isPaused) {
+                    indicator.resume();
+                } else {
+                    indicator.pause();
+                }
+            });
+        }
 
         if (cancellable && onCancel) {
             const cancelBtn = modal.querySelector('.progress-cancel-btn');
