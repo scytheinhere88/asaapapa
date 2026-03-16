@@ -239,31 +239,66 @@ class AIDomainParser {
      */
     private function buildPrompt(string $keywordHint): string {
         return <<<PROMPT
-Indonesian domain parser. Parse government, organization, school, hospital, business domains.
+Indonesian domain parser. Parse organization/institution domains to extract location and institution name.
 {$keywordHint}
-CRITICAL RULES:
-1. PRESERVE EXACT SPELLING - Use exact location name from domain
-2. NO HALLUCINATION - "karangpilang" → "Karangpilang" (NOT "Karang Pilang")
-3. NO AUTO-CORRECTION - "kotaagung" → "Kotaagung" (NOT "Kota Agung")
-4. Compound words are single: Karangpilang, Tulangbawang, Gadingserpong
+━━━ CRITICAL PARSING RULES ━━━
+
+STEP 1: KEYWORD REMOVAL (MOST IMPORTANT!)
+- If keyword hint provided, REMOVE it from domain FIRST before parsing location
+- Examples:
+  * "aptisikerinci.org" + keyword:"aptisi" → REMOVE "aptisi" → extract "kerinci" → "Kerinci"
+  * "ksbsibungo.org" + keyword:"ksbsi" → REMOVE "ksbsi" → extract "bungo" → "Bungo"
+  * "aptisikotapasuruan.org" + keyword:"aptisi" → REMOVE "aptisi" → extract "kotapasuruan" → "Kota Pasuruan"
+
+STEP 2: LOCATION EXTRACTION
+- Extract location from REMAINING text after keyword removal
+- Preserve exact spelling - no auto-correction
+- Detect location type indicators:
+  * "kota" prefix → "Kota [Name]" (location_level: "kota")
+  * "kab" prefix → "Kab. [Name]" (location_level: "kabupaten")
+  * no prefix → just capitalize properly (location_level: "kota" default)
+
+STEP 3: SPELLING RULES
+- PRESERVE EXACT SPELLING from domain
+- NO HALLUCINATION - use exactly what's in domain
+- NO AUTO-CORRECTION - "kotaagung" stays "Kotaagung" (NOT "Kota Agung")
+- NO WORD SPLITTING - "karangpilang" → "Karangpilang" (NOT "Karang Pilang")
+- Compound words stay as single word: Karangpilang, Tulangbawang, Gadingserpong, Kerinci
 
 LOCATION LEVELS:
-- nasional: no specific location
-- provinsi: province name/abbreviation
-- kabupaten: has "kab"/"kabupaten" → prefix "Kab."
-- kota: has "kota" → prefix "Kota"
-- kecamatan: subdistrict name
-- kelurahan: village/neighborhood
+- nasional: no specific location (national organization)
+- provinsi: province name or abbreviation
+- kabupaten: has "kab"/"kabupaten" prefix → use "Kab. [Name]"
+- kota: has "kota" prefix or default → use "Kota [Name]" or just "[Name]"
+- kecamatan: subdistrict/district name
+- kelurahan: village/neighborhood name
 
-OUTPUT (JSON only, no markdown):
-{"results":[{"domain":"exact","institution":"SHORT","institution_full":"FULL NAME","location_display":"Proper Format","location_level":"level","province":"Province Name","location_slug":"lowercase","keyword":"slug-with-hyphens","search_query":"Google optimized","email_slug":"clean"}]}
+OUTPUT FORMAT (valid JSON only, no markdown):
+{"results":[{"domain":"exact.domain.org","institution":"ACRONYM","institution_full":"Full Institution Name","location_display":"Proper Capitalized Location","location_level":"kota|kabupaten|provinsi|nasional","province":"Province Name","location_slug":"lowercase-slug","keyword":"lowercase-keyword","search_query":"Location Name Institution","email_slug":"cleanslug"}]}
 
-EXAMPLES:
-ksbsibungo.org → institution:"KSBSI", location_display:"Bungo"
-ksbsikotabandung.org → institution:"KSBSI", location_display:"Kota Bandung"
-ksbsikarangpilang.org → institution:"KSBSI", location_display:"Karangpilang" (NOT "Karang Pilang")
+REAL EXAMPLES:
+INPUT: aptisikerinci.org + keyword:"aptisi"
+STEP 1: Remove "aptisi" → "kerinci"
+STEP 2: Extract location → "kerinci"
+STEP 3: Capitalize → "Kerinci"
+OUTPUT: {"institution":"APTISI","location_display":"Kerinci","location_level":"kota"}
 
-RESPOND with valid JSON ONLY - no explanation, no markdown.
+INPUT: ksbsikotabandung.org + keyword:"ksbsi"
+STEP 1: Remove "ksbsi" → "kotabandung"
+STEP 2: Detect "kota" prefix → "Kota Bandung"
+OUTPUT: {"institution":"KSBSI","location_display":"Kota Bandung","location_level":"kota"}
+
+INPUT: aptisikotapasuruan.org + keyword:"aptisi"
+STEP 1: Remove "aptisi" → "kotapasuruan"
+STEP 2: Detect "kota" prefix → "Kota Pasuruan"
+OUTPUT: {"institution":"APTISI","location_display":"Kota Pasuruan","location_level":"kota","province":"Jawa Timur"}
+
+INPUT: ksbsikarangpilang.org + keyword:"ksbsi"
+STEP 1: Remove "ksbsi" → "karangpilang"
+STEP 2: No prefix, keep as-is → "Karangpilang"
+OUTPUT: {"institution":"KSBSI","location_display":"Karangpilang","location_level":"kecamatan"}
+
+CRITICAL: RESPOND with ONLY valid JSON. NO markdown, NO explanation, NO ```json``` wrapper.
 PROMPT;
     }
 
