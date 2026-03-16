@@ -256,6 +256,9 @@ if(isset($_SESSION['temp_2fa_user']) && !isset($_POST['verify_2fa'])){
     </div>
     <button type="submit" class="btn btn-amber" style="width:100%;justify-content:center;margin-top:4px;">Sign In →</button>
   </form>
+  <div style="text-align:center;margin-top:16px;">
+    <a href="/auth/forgot_password.php" style="color:var(--a1);text-decoration:none;font-size:13px;">Forgot your password?</a>
+  </div>
   <div style="text-align:center;margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);">
     No account? <a href="/auth/register.php" style="color:var(--a1);text-decoration:none;">Create one free</a>
   </div>

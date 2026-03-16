@@ -103,5 +103,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     </div>
     <button type="submit" class="btn btn-danger" style="width:100%;justify-content:center;">🛡 Enter Admin Panel</button>
   </form>
+  <div style="text-align:center;margin-top:16px;">
+    <a href="/auth/forgot_password.php" style="color:var(--err);text-decoration:none;font-size:13px;">Forgot your password?</a>
+  </div>
 </div></div>
 </body></html>
