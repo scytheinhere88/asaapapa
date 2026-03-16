@@ -379,6 +379,41 @@ class SecurityManager {
         return htmlspecialchars($output, ENT_QUOTES, 'UTF-8');
     }
 
+    public function escapeOutput($output) {
+        return $this->sanitizeOutput($output);
+    }
+
+    public function hashPassword($password) {
+        return password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+    }
+
+    public function verifyPassword($password, $hash) {
+        return password_verify($password, $hash);
+    }
+
+    public function generateToken($length = 32) {
+        return bin2hex(random_bytes($length));
+    }
+
+    public function validateEmail($email) {
+        return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+    }
+
+    public function stripTags($input) {
+        return strip_tags($input);
+    }
+
+    public function isSecurePassword($password) {
+        $validation = $this->validatePasswordStrength($password);
+        return $validation['valid'];
+    }
+
+    public function generateSessionFingerprint() {
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '';
+        return hash('sha256', $userAgent . $ipAddress);
+    }
+
     private function getClientIP() {
         $ipKeys = [
             'HTTP_CF_CONNECTING_IP',

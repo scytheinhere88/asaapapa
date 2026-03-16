@@ -4,6 +4,7 @@ require_once dirname(__DIR__).'/includes/Analytics.php';
 require_once dirname(__DIR__).'/includes/EmailSystem.php';
 require_once dirname(__DIR__).'/includes/SecurityManager.php';
 require_once dirname(__DIR__).'/includes/AuditLogger.php';
+require_once dirname(__DIR__).'/includes/EmailVerification.php';
 startSession();
 if(isLoggedIn()){header('Location:'.APP_URL.'/dashboard/');exit;}
 
@@ -94,6 +95,9 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
           ]
         ]);
 
+        $emailVerification = new EmailVerification(db());
+        $emailVerification->sendVerificationEmail($uid, $email, $name);
+
         $emailSystem = new EmailSystem(db());
         $emailSystem->sendFromTemplate('welcome', $email, $name, [
           'user_name' => $name,
@@ -101,7 +105,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
         ], $uid, 3);
 
         $_SESSION['uid']=$uid;$_SESSION['lt']=time();
-        header('Location:'.APP_URL.'/dashboard/');exit;
+        $suc='Registration successful! Please check your email to verify your account.';
+        header('Location:'.APP_URL.'/auth/resend_verification.php');exit;
       }
     }catch(Exception $e){
       $err='Registration failed. Please try again.';

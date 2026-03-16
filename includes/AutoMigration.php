@@ -16,6 +16,8 @@ class AutoMigration
             $this->ensureProductMappingsTable();
             $this->seedProductMappings();
             $this->ensureAutopilotTables();
+            $this->ensureEmailVerificationTable();
+            $this->ensureUsersEmailVerificationColumns();
             return true;
         } catch (Exception $e) {
             error_log("AutoMigration error: " . $e->getMessage());
@@ -248,5 +250,38 @@ class AutoMigration
                 FOREIGN KEY (job_id) REFERENCES autopilot_jobs(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+    }
+
+    private function ensureEmailVerificationTable()
+    {
+        $this->conn->exec("
+            CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                token VARCHAR(64) UNIQUE NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                expires_at DATETIME NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                used_at DATETIME NULL,
+                INDEX idx_token (token),
+                INDEX idx_user_id (user_id),
+                INDEX idx_expires_at (expires_at),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+
+    private function ensureUsersEmailVerificationColumns()
+    {
+        $checkVerified = $this->conn->query("SHOW COLUMNS FROM users LIKE 'email_verified'");
+        if ($checkVerified->rowCount() === 0) {
+            $this->conn->exec("ALTER TABLE users ADD COLUMN email_verified TINYINT(1) DEFAULT 0 AFTER email");
+            $this->conn->exec("ALTER TABLE users ADD INDEX idx_email_verified (email_verified)");
+        }
+
+        $checkVerifiedAt = $this->conn->query("SHOW COLUMNS FROM users LIKE 'email_verified_at'");
+        if ($checkVerifiedAt->rowCount() === 0) {
+            $this->conn->exec("ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL AFTER email_verified");
+        }
     }
 }
