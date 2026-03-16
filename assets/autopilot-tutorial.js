@@ -57,7 +57,9 @@ function initAutopilotTutorial() {
         if (showTutorial) {
             tutorial.onComplete = () => {
                 tutorial.markCompleted(tutorialId);
-                showToast('Tutorial completed! You are ready to use Autopilot.', 'success');
+                if (typeof showToast === 'function') {
+                    showToast('Tutorial completed! You are ready to use Autopilot.', 'success');
+                }
             };
             setTimeout(() => tutorial.start(tutorialId), 500);
         } else {
