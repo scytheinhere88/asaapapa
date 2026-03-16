@@ -45,8 +45,9 @@ try {
     error_log("Autopilot tables creation: " . $e->getMessage());
 }
 
-set_time_limit(120);
-ini_set('max_execution_time', 120);
+set_time_limit(180);
+ini_set('max_execution_time', 180);
+ini_set('memory_limit', '1024M');
 header('Content-Type: application/json');
 require_csrf();
 

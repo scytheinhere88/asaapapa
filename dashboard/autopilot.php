@@ -892,14 +892,25 @@ async function pickFolder(){
 
     var extList = Object.entries(stats.ext).sort(function(a,b){return b[1]-a[1];}).slice(0,6)
       .map(function(e){return e[0]+'('+e[1]+')';}).join(' ');
-    var totalKB = (Object.values(AP.templateFiles).reduce(function(a,v){return a+v.length;},0)/1024).toFixed(1);
-    document.getElementById('folder-meta').textContent = stats.files+' files / '+totalKB+' KB / '+extList;
+    var totalBytes = Object.values(AP.templateFiles).reduce(function(a,v){return a+v.length;},0);
+    var totalKB = (totalBytes/1024).toFixed(1);
+    var totalMB = (totalBytes/(1024*1024)).toFixed(2);
+    var sizeDisplay = totalBytes > 1024*1024 ? totalMB+' MB' : totalKB+' KB';
+
+    document.getElementById('folder-meta').textContent = stats.files+' files / '+sizeDisplay+' / '+extList;
     document.getElementById('sec1-meta').textContent   = stats.files+' files';
     document.getElementById('folder-chips').innerHTML  = Object.entries(stats.ext)
       .sort(function(a,b){return b[1]-a[1];})
       .map(function(e){return '<span class="ap-chip">'+e[0]+' <strong style="color:#fff">'+e[1]+'</strong></span>';}).join('');
 
-    apLog('ok','Scan done',stats.files+' files / '+stats.skipped+' skipped / '+totalKB+' KB');
+    apLog('ok','Scan done',stats.files+' files / '+stats.skipped+' skipped / '+sizeDisplay);
+
+    // Warn if template is very large
+    if(totalBytes > 100*1024*1024){
+      apLog('warn','Large template detected ('+totalMB+' MB) - processing may be slower. Consider splitting into smaller batches.');
+    } else if(totalBytes > 50*1024*1024){
+      apLog('info','Template size: '+totalMB+' MB - autopilot will use adaptive chunking for optimal performance');
+    }
     sectionDone(1); stepDone(1); sectionActivate(2);
     apLog('info','Step 1 done - enter your domains below');
 
@@ -1540,8 +1551,19 @@ async function runPipeline(){
   });
   document.getElementById('sec5-meta').textContent = '0 / '+total;
 
+  // Dynamic chunk size based on total domains and estimated file size
+  var estimatedFileSize = Object.keys(AP.templateFiles).reduce(function(sum, path){
+    return sum + (AP.templateFiles[path].length || 0);
+  }, 0);
+  var fileSizeMB = estimatedFileSize / (1024 * 1024);
+
+  // Adaptive chunking: smaller chunks for large files
   var CHUNK_SIZE = 50;
-  apLog('info','Processing '+total+' domains in chunks of '+CHUNK_SIZE+' (prevents timeout)');
+  if(fileSizeMB > 50) CHUNK_SIZE = 20; // Large files: 20 per chunk
+  if(fileSizeMB > 100) CHUNK_SIZE = 10; // Very large files: 10 per chunk
+  if(total > 500) CHUNK_SIZE = Math.min(CHUNK_SIZE, 25); // Many domains: cap at 25
+
+  apLog('info','Processing '+total+' domains (template: '+fileSizeMB.toFixed(1)+'MB, chunk size: '+CHUNK_SIZE+')');
 
   for(var i=0; i<AP.domainList.length; i++){
     var domain = AP.domainList[i];
@@ -1627,22 +1649,41 @@ async function runPipeline(){
 
     if((i+1) % CHUNK_SIZE === 0 && i+1 < total){
       apLog('info','Chunk complete: '+(i+1)+'/'+total+' — yielding to browser (prevents freeze)');
-      await new Promise(function(r){setTimeout(r,800);});
+
+      // Aggressive memory cleanup for large files
+      if(fileSizeMB > 50){
+        apLog('dim','Aggressive cleanup for large template...');
+        modified = null;
+        rules = null;
+        data = null;
+      }
 
       // Memory reporting
       if(performance.memory && performance.memory.usedJSHeapSize){
         var memMB = (performance.memory.usedJSHeapSize/1024/1024).toFixed(1);
-        apLog('dim','Memory: '+memMB+' MB');
+        var memLimit = (performance.memory.jsHeapSizeLimit/1024/1024).toFixed(1);
+        var memPct = ((performance.memory.usedJSHeapSize/performance.memory.jsHeapSizeLimit)*100).toFixed(1);
+        apLog('dim','Memory: '+memMB+'/'+memLimit+' MB ('+memPct+'%)');
+
+        // Warning if memory usage is high
+        if(memPct > 80){
+          apLog('warn','High memory usage ('+memPct+'%) - consider processing fewer domains at once');
+        }
       }
 
       // Trigger garbage collection hint (browser may ignore)
       if(typeof gc !== 'undefined'){
         try{ gc(); apLog('dim','GC triggered'); }catch(e){}
       }
+
+      // Adaptive delay based on file size
+      var delayMs = fileSizeMB > 100 ? 1500 : (fileSizeMB > 50 ? 1000 : 800);
+      await new Promise(function(r){setTimeout(r,delayMs);});
     }
 
-    // Light cleanup every 10 domains
-    if((i+1) % 10 === 0){
+    // Frequent cleanup for large files
+    var cleanupInterval = fileSizeMB > 50 ? 5 : 10;
+    if((i+1) % cleanupInterval === 0){
       modified = null;
       rules = null;
       data = null;

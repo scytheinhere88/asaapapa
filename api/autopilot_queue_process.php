@@ -14,9 +14,9 @@ require_once dirname(__DIR__).'/includes/SystemMonitor.php';
 header('Content-Type: application/json');
 require_csrf();
 
-// Increase execution time and memory for large batches
-set_time_limit(300); // 5 minutes max per chunk
-ini_set('memory_limit', '512M');
+// Increase execution time and memory for large batches (supports 100MB+ files)
+set_time_limit(600); // 10 minutes max per chunk for large files
+ini_set('memory_limit', '2048M'); // 2GB for handling large templates
 
 $body = json_decode(file_get_contents('php://input'), true) ?? [];
 $jobId = $body['job_id'] ?? '';
