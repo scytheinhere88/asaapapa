@@ -139,6 +139,69 @@ class AutopilotDomainProcessor
         return ['success' => true, 'analysis' => $data['choices'][0]['message']['content']];
     }
 
+    public function parseDomainWithAI($domain, $keywordHint = '')
+    {
+        require_once __DIR__ . '/../api/ai_parser.php';
+
+        $parser = new AIDomainParser();
+
+        if (!$parser->isAvailable()) {
+            return $this->regexParseDomain($domain, $keywordHint);
+        }
+
+        $result = $parser->parseOne($domain, $keywordHint);
+
+        return [
+            'success' => true,
+            'domain' => $domain,
+            'institution' => $result['institution'] ?? '',
+            'institution_full' => $result['institution_full'] ?? '',
+            'location_display' => $result['location_display'] ?? '',
+            'location_level' => $result['location_level'] ?? 'kota',
+            'province' => $result['province'] ?? '',
+            'location_slug' => $result['location_slug'] ?? '',
+            'keyword' => $result['keyword'] ?? '',
+            'search_query' => $result['search_query'] ?? '',
+            'email_slug' => $result['email_slug'] ?? '',
+            'parse_source' => $result['parse_source'] ?? 'ai'
+        ];
+    }
+
+    private function regexParseDomain($domain, $keywordHint)
+    {
+        $cleanDomain = strtolower(preg_replace('/^www\./', '', $domain));
+        $parts = explode('.', $cleanDomain);
+        $mainPart = $parts[0];
+
+        if (!empty($keywordHint)) {
+            $keyword = strtolower($keywordHint);
+            $mainPart = str_replace($keyword, '', $mainPart);
+        }
+
+        $location = ucwords(str_replace(['-', '_'], ' ', $mainPart));
+
+        if (preg_match('/kota\s*(.+)/i', $location, $m)) {
+            $location = 'Kota ' . ucwords($m[1]);
+        } elseif (preg_match('/kab\s*(.+)/i', $location, $m)) {
+            $location = 'Kab. ' . ucwords($m[1]);
+        }
+
+        return [
+            'success' => true,
+            'domain' => $domain,
+            'institution' => strtoupper($keywordHint),
+            'institution_full' => strtoupper($keywordHint),
+            'location_display' => $location,
+            'location_level' => 'kota',
+            'province' => '',
+            'location_slug' => strtolower($mainPart),
+            'keyword' => strtolower($keywordHint),
+            'search_query' => $location . ' ' . $keywordHint,
+            'email_slug' => preg_replace('/[^a-z0-9]/', '', $mainPart),
+            'parse_source' => 'regex'
+        ];
+    }
+
     private function buildAnalysisPrompt($domain, $content, $keywordHint)
     {
         $prompt = "Analyze this website content from $domain.\n\n";

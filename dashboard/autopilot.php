@@ -762,9 +762,13 @@ if (!hasAddonAccess((int)$u['id'], 'autopilot')) {
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 </style>
 
+<link rel="stylesheet" href="/assets/autopilot-preview.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="/assets/autopilot-safe-polling.js"></script>
 <script src="/assets/safe-timeout-handler.js"></script>
+<script src="/assets/autopilot-preview.js"></script>
+<script src="/assets/tutorial-system.js"></script>
+<script src="/assets/autopilot-tutorial.js"></script>
 <script>
 var CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;
 /* =========================================================
