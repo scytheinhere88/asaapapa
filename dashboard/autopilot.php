@@ -763,6 +763,8 @@ if (!hasAddonAccess((int)$u['id'], 'autopilot')) {
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="/assets/autopilot-safe-polling.js"></script>
+<script src="/assets/safe-timeout-handler.js"></script>
 <script>
 var CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;
 /* =========================================================
@@ -1035,21 +1037,33 @@ async function runAIDetect(){
       apLog('info', 'User hints detected', (userHints.length)+' chars - will guide Bot detection');
     }
 
-    var controller = new AbortController();
-    var tid = setTimeout(function(){ controller.abort(); }, 90000);
-    var detectRes = await fetch('/api/autopilot_detect.php',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF_TOKEN},
-      signal: controller.signal,
-      body: JSON.stringify({
-        template_content: sampleContent,
-        domains:          AP.domainList,
-        ref_domain:       AP.domainList[0],
-        user_hints:       userHints  // Send hints to Bot
-      })
-    });
-    clearTimeout(tid);
-    clearInterval(timer);
+    var detectRequest = SafeTimeout.createAbortableRequest(
+      '/api/autopilot_detect.php',
+      {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF_TOKEN},
+        body: JSON.stringify({
+          template_content: sampleContent,
+          domains:          AP.domainList,
+          ref_domain:       AP.domainList[0],
+          user_hints:       userHints
+        })
+      },
+      90000
+    );
+
+    var detectRes;
+    try {
+      detectRes = await detectRequest.promise;
+    } catch(fetchErr) {
+      if (detectRequest.timeout.isTimedOut()) {
+        throw new Error('Detection timeout after 90s - template may be too large or server busy');
+      }
+      throw fetchErr;
+    } finally {
+      clearInterval(timer);
+      detectRequest.timeout.clear();
+    }
 
     var rawText = await detectRes.text();
     var detectData;
@@ -1095,7 +1109,6 @@ async function runAIDetect(){
     document.getElementById('sec3-meta').textContent = Object.keys(AP.mapping).length+' fields';
 
   } catch(e){
-    clearInterval && clearInterval();
     apLog('err','Detection error', e.message);
     document.getElementById('detect-loading').style.display = 'none';
     var dr = document.getElementById('detect-results');
