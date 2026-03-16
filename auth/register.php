@@ -105,8 +105,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
         ], $uid, 3);
 
         $_SESSION['uid']=$uid;$_SESSION['lt']=time();
-        $suc='Registration successful! Please check your email to verify your account.';
-        header('Location:'.APP_URL.'/auth/resend_verification.php');exit;
+        header('Location:'.APP_URL.'/dashboard/');exit;
       }
     }catch(Exception $e){
       $err='Registration failed. Please try again.';
